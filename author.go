@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/go-playground/validator.v9"
@@ -40,7 +43,16 @@ func Login(res http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-		json.NewEncoder(res).Encode(author)
+		claims := CustomJWTClaim{
+			ID: author.ID,
+			StandardClaims: jwt.StandardClaims{
+				ExpiresAt: time.Now().Local().Add(time.Hour).Unix(),
+				Issuer:    "Bla-bla",
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString(JwtSecret)
+		res.Write([]byte(`{ "token": "` + tokenString + `" }`))
 		return
 	}
 	res.Write([]byte(`{"message": "invalid user name"}`))

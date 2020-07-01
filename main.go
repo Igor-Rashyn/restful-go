@@ -1,11 +1,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
+	"github.com/mitchellh/mapstructure"
+
+	"github.com/dgrijalva/jwt-go"
+
 	"github.com/gorilla/mux"
 )
+
+var JwtSecret []byte = []byte("bububu")
 
 var authors []Author = []Author{
 	Author{
@@ -31,6 +38,31 @@ var articles []Article = []Article{
 		Title:   "Article 1",
 		Content: "Some awesome news",
 	},
+}
+
+type CustomJWTClaim struct {
+	ID string `json:"id"`
+	jwt.StandardClaims
+}
+
+func ValidateJWT(t string) (interface{}, error) {
+	token, err := jwt.Parse(t, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method %v", token.Header["alg"])
+		}
+		return JwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, errors.New(`{"message": "` + err.Error() + `" }`)
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		var tokenData CustomJWTClaim
+		mapstructure.Decode(claims, &tokenData)
+		return tokenData, nil
+	}
+	return nil, errors.New(`{"message": "invalid token" }`)
 }
 
 func RootRoute(response http.ResponseWriter, request *http.Request) {

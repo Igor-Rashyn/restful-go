@@ -73,15 +73,22 @@ func CreateArticle(res http.ResponseWriter, req *http.Request) {
 	res.Header().Add("content-type", "application/json")
 	var article Article
 	json.NewDecoder(req.Body).Decode(&article)
+	tokenString := req.URL.Query().Get("token")
+	token, err := ValidateJWT(tokenString)
+	if err != nil {
+		res.WriteHeader(500)
+		res.Write([]byte(`{ "message": "` + err.Error() + `"}`))
+		return
+	}
 	validate := validator.New()
-	err := validate.Struct(article)
+	err = validate.Struct(article)
 	if err != nil {
 		res.WriteHeader(500)
 		res.Write([]byte(`{ "message": "` + err.Error() + `"}`))
 		return
 	}
 	article.ID = uuid.Must(uuid.NewV4()).String()
-	article.Author = "nish"
+	article.Author = token.(CustomJWTClaim).ID
 	articles = append(articles, article)
 	json.NewEncoder(res).Encode(articles)
 }
