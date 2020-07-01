@@ -5,16 +5,17 @@ import (
 	"net/http"
 
 	uuid "github.com/satori/go.uuid"
+	"gopkg.in/go-playground/validator.v9"
 
 	"github.com/gorilla/mux"
 )
 
 //Article model
 type Article struct {
-	ID      string `json:"id,omitempty"`
-	Author  string `json:"author,omitempty"`
-	Title   string `json:"title,omitempty"`
-	Content string `json:"content,omitempty"`
+	ID      string `json:"id,omitempty" validate:"omitempty,uuid"`
+	Author  string `json:"author,omitempty" validate:"isdefault"`
+	Title   string `json:"title,omitempty" validate:"required"`
+	Content string `json:"content,omitempty" validate:"required"`
 }
 
 func GetAllArticles(res http.ResponseWriter, req *http.Request) {
@@ -72,7 +73,15 @@ func CreateArticle(res http.ResponseWriter, req *http.Request) {
 	res.Header().Add("content-type", "application/json")
 	var article Article
 	json.NewDecoder(req.Body).Decode(&article)
+	validate := validator.New()
+	err := validate.Struct(article)
+	if err != nil {
+		res.WriteHeader(500)
+		res.Write([]byte(`{ "message": "` + err.Error() + `"}`))
+		return
+	}
 	article.ID = uuid.Must(uuid.NewV4()).String()
+	article.Author = "nish"
 	articles = append(articles, article)
 	json.NewEncoder(res).Encode(articles)
 }
