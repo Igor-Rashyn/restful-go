@@ -7,6 +7,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/go-playground/validator.v9"
 
+	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 )
 
@@ -38,8 +39,9 @@ func GetArticle(res http.ResponseWriter, req *http.Request) {
 func DeleteArticle(res http.ResponseWriter, req *http.Request) {
 	res.Header().Add("content-type", "application/json")
 	params := mux.Vars(req)
+	token := context.Get(req, "token").(CustomJWTClaim)
 	for index, article := range articles {
-		if article.ID == params["id"] {
+		if article.ID == params["id"] && article.Author == token.ID {
 			articles = append(articles[:index], articles[index+1:]...)
 			json.NewEncoder(res).Encode(articles)
 			return
@@ -51,10 +53,11 @@ func DeleteArticle(res http.ResponseWriter, req *http.Request) {
 func UpdateArticle(res http.ResponseWriter, req *http.Request) {
 	res.Header().Add("content-type", "application/json")
 	params := mux.Vars(req)
+	token := context.Get(req, "token").(CustomJWTClaim)
 	var newArticle Article
 	json.NewDecoder(req.Body).Decode(&newArticle)
 	for index, article := range articles {
-		if article.ID == params["id"] {
+		if article.ID == params["id"] && article.Author == token.ID {
 			if newArticle.Title != "" {
 				article.Title = newArticle.Title
 			}
@@ -73,22 +76,16 @@ func CreateArticle(res http.ResponseWriter, req *http.Request) {
 	res.Header().Add("content-type", "application/json")
 	var article Article
 	json.NewDecoder(req.Body).Decode(&article)
-	tokenString := req.URL.Query().Get("token")
-	token, err := ValidateJWT(tokenString)
-	if err != nil {
-		res.WriteHeader(500)
-		res.Write([]byte(`{ "message": "` + err.Error() + `"}`))
-		return
-	}
+	token := context.Get(req, "token").(CustomJWTClaim)
 	validate := validator.New()
-	err = validate.Struct(article)
+	err := validate.Struct(article)
 	if err != nil {
 		res.WriteHeader(500)
 		res.Write([]byte(`{ "message": "` + err.Error() + `"}`))
 		return
 	}
 	article.ID = uuid.Must(uuid.NewV4()).String()
-	article.Author = token.(CustomJWTClaim).ID
+	article.Author = token.ID
 	articles = append(articles, article)
 	json.NewEncoder(res).Encode(articles)
 }

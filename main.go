@@ -4,11 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/gorilla/handlers"
 
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/dgrijalva/jwt-go"
 
+	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 )
 
@@ -70,6 +74,30 @@ func RootRoute(response http.ResponseWriter, request *http.Request) {
 	response.Write([]byte(`{"message": "Hello World"}`))
 }
 
+func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		authorizationHeader := req.Header.Get("authorization")
+		if authorizationHeader != "" {
+			bearerToken := strings.Split(authorizationHeader, " ")
+			if len(bearerToken) == 2 {
+				decoded, err := ValidateJWT(bearerToken[1])
+				if err != nil {
+					res.Header().Add("content-type", "application/json")
+					res.WriteHeader(500)
+					res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+					return
+				}
+				context.Set(req, "token", decoded)
+				next(res, req)
+			}
+		} else {
+			res.Header().Add("content-type", "application/json")
+			res.WriteHeader(500)
+			res.Write([]byte(`{ "message": "token is required" }`))
+		}
+	})
+}
+
 func main() {
 	fmt.Println("Starting app...")
 
@@ -79,12 +107,33 @@ func main() {
 	router.HandleFunc("/login", Login).Methods("POST")
 	router.HandleFunc("/authors", GetAllAuthors).Methods("GET")
 	router.HandleFunc("/author/{id}", GetAuthor).Methods("GET")
-	router.HandleFunc("/author/{id}", DeleteAuthor).Methods("DELETE")
-	router.HandleFunc("/author/{id}", UpdateAuthor).Methods("PUT")
+	router.HandleFunc("/author/{id}", JWTMiddleware(DeleteAuthor)).Methods("DELETE")
+	router.HandleFunc("/author/{id}", JWTMiddleware(UpdateAuthor)).Methods("PUT")
 	router.HandleFunc("/articles", GetAllArticles).Methods("GET")
 	router.HandleFunc("/article/{id}", GetArticle).Methods("GET")
-	router.HandleFunc("/article/{id}", DeleteArticle).Methods("DELETE")
-	router.HandleFunc("/article/{id}", UpdateArticle).Methods("PUT")
-	router.HandleFunc("/article", CreateArticle).Methods("POST")
-	http.ListenAndServe(":12345", router)
+	router.HandleFunc("/article/{id}", JWTMiddleware(DeleteArticle)).Methods("DELETE")
+	router.HandleFunc("/article/{id}", JWTMiddleware(UpdateArticle)).Methods("PUT")
+	router.HandleFunc("/article", JWTMiddleware(CreateArticle)).Methods("POST")
+	methods := handlers.AllowedMethods(
+		[]string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+		},
+	)
+	headers := handlers.AllowedHeaders(
+		[]string{
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+		},
+	)
+	origins := handlers.AllowedOrigins(
+		[]string{
+			"*",
+		},
+	)
+
+	http.ListenAndServe(":12345", handlers.CORS(headers, methods, origins)(router))
 }
